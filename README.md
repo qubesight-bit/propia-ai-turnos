@@ -28,11 +28,20 @@ Continue developing this project in the [Lovable editor](https://lovable.dev/pro
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Para trabajar en el repositorio, usá Bun para instalar las dependencias fijadas en `bun.lock` y Node.js para ejecutar las herramientas del proyecto.
 
 ```sh
 git clone <this-repository-url>
 cd <repository-name>
-npm i
-npm run dev
+bun install --frozen-lockfile
+bun run dev
+```
+
+Verificaciones locales
+
+```sh
+bun run test
+bun run lint
+bun run tsc --noEmit
+bun run build
 ```

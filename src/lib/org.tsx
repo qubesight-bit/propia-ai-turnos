@@ -62,10 +62,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setOrgIdState(localStorage.getItem(KEY));
   }, []);
 
-  const memberships = memQ.data ?? [];
-  const current = memberships.find((m) => m.organization_id === orgId) ?? memberships[0];
-
   const value = useMemo<OrgCtx | null>(() => {
+    const memberships = memQ.data ?? [];
+    const current = memberships.find((m) => m.organization_id === orgId) ?? memberships[0];
     if (!current || !userQ.data) return null;
     return {
       userId: userQ.data.id,
@@ -80,7 +79,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         qc.invalidateQueries();
       },
     };
-  }, [current, userQ.data, memberships, qc]);
+  }, [memQ.data, orgId, userQ.data, qc]);
 
   if (userQ.isLoading || memQ.isLoading) {
     return (
@@ -89,8 +88,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (memQ.error) {
-    return <div className="p-8 text-destructive">{errorMessage(memQ.error)}</div>;
+  const error = userQ.error ?? memQ.error;
+  if (error) {
+    return <div className="p-8 text-destructive">{errorMessage(error)}</div>;
   }
   if (!value) return <CreateOrg onCreated={() => memQ.refetch()} />;
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -113,11 +113,17 @@ function CreateOrg({ onCreated }: { onCreated: () => void }) {
             className="space-y-4"
             onSubmit={async (e) => {
               e.preventDefault();
-              if (name.trim().length < 2) { toast.error("Escriba un nombre de al menos 2 caracteres"); return; }
+              if (name.trim().length < 2) {
+                toast.error("Escriba un nombre de al menos 2 caracteres");
+                return;
+              }
               setBusy(true);
               const { data, error } = await supabase.rpc("create_organization", { _name: name });
               setBusy(false);
-              if (error) { toast.error(errorMessage(error)); return; }
+              if (error) {
+                toast.error(errorMessage(error));
+                return;
+              }
               localStorage.setItem(KEY, data as string);
               toast.success("Organización creada");
               onCreated();
@@ -125,7 +131,12 @@ function CreateOrg({ onCreated }: { onCreated: () => void }) {
           >
             <div className="space-y-2">
               <Label htmlFor="org">Nombre de la organización</Label>
-              <Input id="org" value={name} onChange={(e) => setName(e.target.value)} placeholder="Residencias Ejemplo S.A." />
+              <Input
+                id="org"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Residencias Ejemplo S.A."
+              />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Crear organización

@@ -67,7 +67,13 @@ export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
 };
 
 export type NextAction =
-  | { kind: "transition"; to: TurnoverStatus; label: string; roles: OrgRole[]; needsMoveIn?: boolean }
+  | {
+      kind: "transition";
+      to: TurnoverStatus;
+      label: string;
+      roles: OrgRole[];
+      needsMoveIn?: boolean;
+    }
   | { kind: "request_approval"; label: string; roles: OrgRole[] }
   | { kind: "await_approval"; label: string; roles: OrgRole[] };
 
@@ -83,11 +89,22 @@ export function nextActions(status: TurnoverStatus): NextAction[] {
     case "exit_announced":
       return [{ kind: "transition", to: "exit_confirmed", label: "Confirmar salida", roles: MGR }];
     case "exit_confirmed":
-      return [{ kind: "transition", to: "inspection_pending", label: "Programar inspección", roles: MGR }];
+      return [
+        { kind: "transition", to: "inspection_pending", label: "Programar inspección", roles: MGR },
+      ];
     case "inspection_pending":
-      return [{ kind: "transition", to: "preparation_in_progress", label: "Iniciar preparación", roles: OPS }];
+      return [
+        {
+          kind: "transition",
+          to: "preparation_in_progress",
+          label: "Iniciar preparación",
+          roles: OPS,
+        },
+      ];
     case "preparation_in_progress":
-      return [{ kind: "transition", to: "ready_for_review", label: "Enviar a revisión", roles: OPS }];
+      return [
+        { kind: "transition", to: "ready_for_review", label: "Enviar a revisión", roles: OPS },
+      ];
     case "ready_for_review":
       return [{ kind: "request_approval", label: "Solicitar aprobación comercial", roles: OPS }];
     case "marketing_approval_pending":
@@ -96,7 +113,13 @@ export function nextActions(status: TurnoverStatus): NextAction[] {
       return [{ kind: "transition", to: "reserved", label: "Marcar reservada", roles: MGR }];
     case "reserved":
       return [
-        { kind: "transition", to: "move_in_completed", label: "Confirmar ingreso", roles: MGR, needsMoveIn: true },
+        {
+          kind: "transition",
+          to: "move_in_completed",
+          label: "Confirmar ingreso",
+          roles: MGR,
+          needsMoveIn: true,
+        },
         { kind: "transition", to: "available_for_leasing", label: "Liberar reserva", roles: MGR },
       ];
     case "move_in_completed":
@@ -146,7 +169,11 @@ export function todayCR() {
 
 export function formatCRC(n?: number | null) {
   if (n == null) return "—";
-  return new Intl.NumberFormat("es-CR", { style: "currency", currency: "CRC", maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    maximumFractionDigits: 0,
+  }).format(n);
 }
 
 export function errorMessage(e: unknown): string {

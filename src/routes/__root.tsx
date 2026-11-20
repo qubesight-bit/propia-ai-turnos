@@ -84,9 +84,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Propia AI · TurnOS" },
-      { name: "description", content: "Rotación inteligente de habitaciones para residencias y apartahoteles." },
+      {
+        name: "description",
+        content: "Rotación inteligente de habitaciones para residencias y apartahoteles.",
+      },
       { property: "og:title", content: "Propia AI · TurnOS" },
-      { property: "og:description", content: "Rotación inteligente de habitaciones para residencias y apartahoteles." },
+      {
+        property: "og:description",
+        content: "Rotación inteligente de habitaciones para residencias y apartahoteles.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

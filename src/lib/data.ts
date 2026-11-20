@@ -2,12 +2,31 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "./org";
 
+const PAGE_SIZE = 500;
+
+async function readAll<T>(
+  page: (start: number, end: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+) {
+  const rows: T[] = [];
+  for (;;) {
+    const { data, error } = await page(rows.length, rows.length + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data) return rows;
+    rows.push(...data);
+    if (data.length < PAGE_SIZE) return rows;
+  }
+}
+
 export function useProperties() {
   const { orgId } = useOrg();
   return useQuery({
     queryKey: ["properties", orgId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("properties").select("*").eq("organization_id", orgId).order("name");
+      const { data, error } = await supabase
+        .from("properties")
+        .select("*")
+        .eq("organization_id", orgId)
+        .order("name");
       if (error) throw error;
       return data;
     },
@@ -18,15 +37,17 @@ export function useRooms() {
   const { orgId } = useOrg();
   return useQuery({
     queryKey: ["rooms", orgId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("rooms")
-        .select("*, properties(name)")
-        .eq("organization_id", orgId)
-        .order("code");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: ({ signal }) =>
+      readAll((start, end) =>
+        supabase
+          .from("rooms")
+          .select("*, properties(name)")
+          .eq("organization_id", orgId)
+          .order("code")
+          .order("id")
+          .range(start, end)
+          .abortSignal(signal),
+      ),
   });
 }
 
@@ -34,15 +55,17 @@ export function useTurnovers() {
   const { orgId } = useOrg();
   return useQuery({
     queryKey: ["turnovers", orgId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("turnovers")
-        .select("*, rooms(code, properties(name))")
-        .eq("organization_id", orgId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: ({ signal }) =>
+      readAll((start, end) =>
+        supabase
+          .from("turnovers")
+          .select("*, rooms(code, properties(name))")
+          .eq("organization_id", orgId)
+          .order("created_at", { ascending: false })
+          .order("id")
+          .range(start, end)
+          .abortSignal(signal),
+      ),
   });
 }
 
@@ -66,14 +89,16 @@ export function useInspections() {
   const { orgId } = useOrg();
   return useQuery({
     queryKey: ["inspections", orgId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("inspections")
-        .select("*, turnovers(status, rooms(code, properties(name)))")
-        .eq("organization_id", orgId);
-      if (error) throw error;
-      return data;
-    },
+    queryFn: ({ signal }) =>
+      readAll((start, end) =>
+        supabase
+          .from("inspections")
+          .select("*, turnovers(status, rooms(code, properties(name)))")
+          .eq("organization_id", orgId)
+          .order("id")
+          .range(start, end)
+          .abortSignal(signal),
+      ),
   });
 }
 
@@ -81,15 +106,17 @@ export function useApprovals() {
   const { orgId } = useOrg();
   return useQuery({
     queryKey: ["approvals", orgId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("approvals")
-        .select("*, turnovers(status, rooms(code, properties(name)))")
-        .eq("organization_id", orgId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: ({ signal }) =>
+      readAll((start, end) =>
+        supabase
+          .from("approvals")
+          .select("*, turnovers(status, rooms(code, properties(name)))")
+          .eq("organization_id", orgId)
+          .order("created_at", { ascending: false })
+          .order("id")
+          .range(start, end)
+          .abortSignal(signal),
+      ),
   });
 }
 
@@ -116,26 +143,30 @@ export function useMembers() {
   });
 }
 
-export function useAudit(entityId?: string) {
+export function useAudit(entityId?: string, limit = 500) {
   const { orgId } = useOrg();
   return useQuery({
-    queryKey: ["audit", orgId, entityId ?? "all"],
-    queryFn: async () => {
+    queryKey: ["audit", orgId, entityId ?? "all", limit],
+    queryFn: async ({ signal }) => {
       let q = supabase
         .from("audit_events")
         .select("*")
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false })
-        .limit(500);
+        .order("id")
+        .limit(limit);
       if (entityId) q = q.or(`entity_id.eq.${entityId},after_json->>turnover_id.eq.${entityId}`);
-      const { data, error } = await q;
+      const { data, error } = await q.abortSignal(signal);
       if (error) throw error;
       return data;
     },
   });
 }
 
-export function memberName(members: { user_id: string; email: string | null; full_name: string | null }[] | undefined, id?: string | null) {
+export function memberName(
+  members: { user_id: string; email: string | null; full_name: string | null }[] | undefined,
+  id?: string | null,
+) {
   if (!id) return "—";
   const m = members?.find((x) => x.user_id === id);
   return m?.full_name || m?.email || "Usuario";

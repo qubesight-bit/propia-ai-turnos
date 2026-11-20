@@ -2,14 +2,28 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import {
-  LayoutDashboard, Building2, RefreshCcw, ClipboardCheck, ShieldCheck, History, Settings, LogOut, Menu,
+  LayoutDashboard,
+  Building2,
+  RefreshCcw,
+  ClipboardCheck,
+  ShieldCheck,
+  History,
+  Settings,
+  LogOut,
+  Menu,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/lib/org";
 import { ROLE_LABEL } from "@/lib/turnover";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -56,7 +70,9 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col gap-6 bg-sidebar p-4 text-sidebar-foreground">
       <div className="px-2 pt-2">
-        <div className="font-display text-xl font-semibold text-sidebar-accent-foreground">Propia AI</div>
+        <div className="font-display text-xl font-semibold text-sidebar-accent-foreground">
+          Propia AI
+        </div>
         <div className="text-xs uppercase tracking-widest text-sidebar-primary">TurnOS</div>
       </div>
       {org.memberships.length > 1 ? (
@@ -66,12 +82,16 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
           </SelectTrigger>
           <SelectContent>
             {org.memberships.map((m) => (
-              <SelectItem key={m.organization_id} value={m.organization_id}>{m.name}</SelectItem>
+              <SelectItem key={m.organization_id} value={m.organization_id}>
+                {m.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
       ) : (
-        <div className="rounded-md bg-sidebar-accent px-3 py-2 text-sm text-sidebar-accent-foreground">{org.orgName}</div>
+        <div className="rounded-md bg-sidebar-accent px-3 py-2 text-sm text-sidebar-accent-foreground">
+          {org.orgName}
+        </div>
       )}
       <NavList {...(onNavigate ? { onNavigate } : {})} />
       <div className="mt-auto space-y-2 border-t border-sidebar-border pt-4 px-2">
@@ -105,7 +125,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="font-display text-lg font-semibold text-primary">Propia AI · TurnOS</div>
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Abrir menú"><Menu className="h-5 w-5" /></Button>
+              <Button variant="ghost" size="icon" aria-label="Abrir menú">
+                <Menu className="h-5 w-5" />
+              </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-72 border-none p-0">
               <SheetTitle className="sr-only">Menú</SheetTitle>
@@ -113,13 +135,23 @@ export function AppShell({ children }: { children: ReactNode }) {
             </SheetContent>
           </Sheet>
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 md:px-8 md:py-8">
+          {children}
+        </main>
       </div>
     </div>
   );
 }
 
-export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
+export function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+}) {
   return (
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
@@ -131,11 +163,21 @@ export function PageHeader({ title, description, actions }: { title: string; des
   );
 }
 
-export function EmptyState({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+export function EmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
   return (
     <div className="rounded-lg border border-dashed bg-card p-10 text-center">
       <p className="font-medium text-foreground">{title}</p>
-      {description && <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{description}</p>}
+      {description && (
+        <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{description}</p>
+      )}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
