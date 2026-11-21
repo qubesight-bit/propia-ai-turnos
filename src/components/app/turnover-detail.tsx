@@ -90,6 +90,14 @@ export function TurnoverDetail({ turnover, onClose }: { turnover: Turnover; onCl
   const completedInspection = (kind: "exit" | "review") =>
     !inspections.isError &&
     inspectionRows.some((item) => item.kind === kind && item.status === "completed");
+  const reviewWithEvidence = inspectionRows.some(
+    (item) =>
+      item.kind === "review" &&
+      item.status === "completed" &&
+      (item.notes?.trim().length ?? 0) >= 5 &&
+      Array.isArray(item.checklist) &&
+      item.checklist.some((point) => typeof point === "string" && !!point.trim()),
+  );
   const pendingApproval = approvals.data?.find((approval) => approval.status === "pending");
   const editableTasks = canChangeTasks(status);
 
@@ -109,8 +117,13 @@ export function TurnoverDetail({ turnover, onClose }: { turnover: Turnover; onCl
         {
           title: step.label,
           blocked:
-            !completedInspection("review") || pendingTasks || tasks.isPending || tasks.isError
-              ? "Complete la revisión final y las tareas pendientes."
+            !completedInspection("exit") ||
+            !reviewWithEvidence ||
+            !activeTasks.length ||
+            pendingTasks ||
+            tasks.isPending ||
+            tasks.isError
+              ? "Complete la inspección de salida, las tareas y la revisión final con un punto verificado."
               : "",
           fields: <Notes />,
           command: (form: FormData) =>

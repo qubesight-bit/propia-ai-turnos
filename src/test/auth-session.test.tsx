@@ -2,7 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useAuthSessionSync } from "@/lib/auth-session";
+import { localAuthPath, useAuthSessionSync } from "@/lib/auth-session";
 
 const auth = vi.hoisted(() => ({ subscribe: vi.fn(), unsubscribe: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({
@@ -35,6 +35,13 @@ afterEach(() => {
 });
 
 describe("Caché y cambios de sesión", () => {
+  it("conserva destinos internos absolutos y usa el panel para orígenes externos", () => {
+    const origin = "https://turnos.example.invalid";
+    expect(localAuthPath(origin + "/turnovers?turnover=demo", origin)).toBe(
+      "/turnovers?turnover=demo",
+    );
+    expect(localAuthPath("https://external.example.invalid/", origin)).toBe("/dashboard");
+  });
   it("borra los datos al cambiar de cuenta y recarga la ruta después de la notificación", async () => {
     const { queryClient, notify, invalidateRouter } = setup();
     notify("INITIAL_SESSION", session("a"));

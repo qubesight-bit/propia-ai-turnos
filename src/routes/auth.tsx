@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { errorMessage } from "@/lib/turnover";
+import { localAuthPath } from "@/lib/auth-session";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (s: Record<string, unknown>) => ({
@@ -30,16 +31,6 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
-function safePath(p?: string) {
-  if (!p) return "/dashboard";
-  try {
-    const u = new URL(p, window.location.origin);
-    return u.origin === window.location.origin ? u.pathname + u.search : "/dashboard";
-  } catch {
-    return "/dashboard";
-  }
-}
-
 function AuthPage() {
   const { redirect } = Route.useSearch();
   const navigate = useNavigate();
@@ -61,7 +52,7 @@ function AuthPage() {
       );
       return;
     }
-    navigate({ to: safePath(redirect) });
+    navigate({ to: localAuthPath(redirect, window.location.origin) });
   }
   async function signUp(e: React.FormEvent) {
     e.preventDefault();

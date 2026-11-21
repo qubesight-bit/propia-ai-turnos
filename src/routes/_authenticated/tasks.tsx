@@ -21,6 +21,7 @@ import {
 } from "@/lib/data";
 import { useOrg } from "@/lib/org";
 import {
+  canAddPendingTask,
   canChangeTasks,
   createTask,
   INSPECTION_LABEL,
@@ -105,7 +106,9 @@ function TasksPage() {
       (!assignee || (task.assignee_id ?? UNASSIGNED) === assignee)
     );
   });
-  const eligibleTurnovers = (turnovers.data ?? []).filter((entry) => canChangeTasks(entry.status));
+  const eligibleTurnovers = (turnovers.data ?? []).filter((entry) =>
+    canAddPendingTask(entry.status),
+  );
   const referencesPending = [properties, rooms, turnovers, members].some(
     (query) => query.isPending,
   );
@@ -245,7 +248,8 @@ function TasksPage() {
         ) : (
           <div className="grid gap-3 xl:grid-cols-2">
             {visibleTasks.map((task) => {
-              const open = canChangeTasks(turnoverById.get(task.turnover_id)?.status);
+              const stage = turnoverById.get(task.turnover_id)?.status;
+              const open = canChangeTasks(stage);
               const pending = task.status === "pending" || task.status === "in_progress";
               const deadline = pending && task.due_date;
               const category = taskType(task);
@@ -310,15 +314,17 @@ function TasksPage() {
                           {task.assignee_id ? "Reasignar" : "Asignar"}
                         </Button>
                       )}
-                      {operate && open && (pending || task.status === "done") && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setEditor({ kind: "status", task })}
-                        >
-                          {pending ? "Completar tarea" : "Marcar pendiente"}
-                        </Button>
-                      )}
+                      {operate &&
+                        open &&
+                        (pending || (task.status === "done" && canAddPendingTask(stage))) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditor({ kind: "status", task })}
+                          >
+                            {pending ? "Completar tarea" : "Marcar pendiente"}
+                          </Button>
+                        )}
                     </div>
                   </CardContent>
                 </Card>

@@ -99,6 +99,25 @@ afterEach(() => {
 });
 
 describe("Rotaciones", () => {
+  it("impide solicitar aprobación con una revisión sin puntos verificados", () => {
+    fixture.tasks.mockReturnValue({ data: [{ id: "task", status: "done" }] });
+    fixture.inspections.mockReturnValue({
+      data: [
+        { id: "exit", kind: "exit", status: "completed" },
+        {
+          id: "review",
+          kind: "review",
+          status: "completed",
+          notes: "Revisión ficticia",
+          checklist: [" "],
+        },
+      ],
+    });
+    renderTurnovers("ready_for_review");
+    openDetail();
+    expect(screen.getByRole("button", { name: "Solicitar aprobación comercial" })).toBeDisabled();
+    expect(fixture.rpc).not.toHaveBeenCalled();
+  });
   it("abre el detalle de una rotación de la organización desde un enlace", () => {
     vi.mocked(Route.useSearch).mockReturnValue({ turnover: "t1" });
     renderTurnovers();
@@ -235,7 +254,16 @@ describe("Rotaciones", () => {
     fixture.role = "staff";
     fixture.tasks.mockReturnValue({ data: [{ id: "task", title: "Limpieza", status: "pending" }] });
     fixture.inspections.mockReturnValue({
-      data: [{ id: "review", kind: "review", status: "completed" }],
+      data: [
+        { id: "exit", kind: "exit", status: "completed" },
+        {
+          id: "review",
+          kind: "review",
+          status: "completed",
+          notes: "Revisión ficticia",
+          checklist: ["Limpieza verificada"],
+        },
+      ],
     });
     const view = renderTurnovers("ready_for_review");
     openDetail();

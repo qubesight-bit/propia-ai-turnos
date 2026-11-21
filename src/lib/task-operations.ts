@@ -14,6 +14,10 @@ export function canChangeTasks(stage?: TurnoverStatus) {
   return !!stage && stage !== "move_in_completed" && stage !== "closed";
 }
 
+export function canAddPendingTask(stage?: TurnoverStatus) {
+  return canChangeTasks(stage) && stage !== "available_for_leasing" && stage !== "reserved";
+}
+
 export function createTask(
   orgId: string,
   turnoverId: string,
@@ -76,6 +80,10 @@ export function saveInspection(
   checklist: string[],
 ) {
   if (notes.length < 5) throw new Error("Ingrese al menos 5 caracteres de hallazgos.");
+  const verified = checklist.map((point) => point.trim()).filter(Boolean);
+  if (inspection.kind === "review" && !verified.length) {
+    throw new Error("La revisión final requiere al menos un punto verificado.");
+  }
   const previous = inspection.checklist;
   const entries: Json[] = Array.isArray(previous)
     ? previous.filter((entry) => typeof entry !== "string")
@@ -87,6 +95,6 @@ export function saveInspection(
     _kind: inspection.kind,
     _notes: notes,
     _evidence_url: inspection.evidence_url ?? "",
-    _checklist: [...entries, ...checklist],
+    _checklist: [...entries, ...verified],
   });
 }

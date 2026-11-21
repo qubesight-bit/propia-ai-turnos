@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "./org";
 import { prepareAuditEvent } from "./audit";
+import { readSafeAudit } from "./audit-client";
 
 const PAGE_SIZE = 500;
 
@@ -158,18 +159,14 @@ export function useAudit(entityId?: string, limit = 500) {
   return useQuery({
     queryKey: ["audit", orgId, entityId ?? "all", limit],
     queryFn: async ({ signal }) => {
-      let q = supabase
-        .from("audit_events")
-        .select("*")
-        .eq("organization_id", orgId)
-        .order("created_at", { ascending: false })
-        .order("id")
-        .limit(limit);
-      if (entityId)
-        q = q.or(
-          `entity_id.eq.${entityId},after_json->>turnover_id.eq.${entityId},before_json->>turnover_id.eq.${entityId}`,
-        );
-      const { data, error } = await q.abortSignal(signal);
+      const { data, error } = await readSafeAudit(
+        {
+          _org: orgId,
+          _limit: limit,
+          ...(entityId ? { _turnover: entityId } : {}),
+        },
+        signal,
+      );
       if (error) throw error;
       return data;
     },
@@ -182,17 +179,15 @@ export function useTurnoverTimeline(turnoverId: string) {
     queryKey: ["audit", orgId, "turnover", turnoverId],
     queryFn: ({ signal }) =>
       readAll((start, end) =>
-        supabase
-          .from("audit_events")
-          .select("*")
-          .eq("organization_id", orgId)
-          .or(
-            `entity_id.eq.${turnoverId},after_json->>turnover_id.eq.${turnoverId},before_json->>turnover_id.eq.${turnoverId}`,
-          )
-          .order("created_at", { ascending: false })
-          .order("id")
-          .range(start, end)
-          .abortSignal(signal),
+        readSafeAudit(
+          {
+            _org: orgId,
+            _turnover: turnoverId,
+            _offset: start,
+            _limit: end - start + 1,
+          },
+          signal,
+        ),
       ),
   });
 }
@@ -213,19 +208,23 @@ export function useAuditPage(filters: AuditFilters, page: number) {
     queryKey: ["audit", orgId, "page", filters, page],
     enabled: !filters.from || !filters.to || filters.from <= filters.to,
     queryFn: async ({ signal }) => {
-      let query = supabase.from("audit_events").select("*").eq("organization_id", orgId);
-      if (filters.from) query = query.gte("created_at", `${filters.from}T00:00:00-06:00`);
-      if (filters.to) query = query.lte("created_at", `${filters.to}T23:59:59.999999-06:00`);
-      if (filters.actor === "system") query = query.is("actor_id", null);
-      else if (filters.actor) query = query.eq("actor_id", filters.actor);
-      if (filters.action) query = query.eq("action", filters.action);
-      if (filters.entity) query = query.eq("entity_type", filters.entity);
-      const offset = page * AUDIT_PAGE_SIZE;
-      const { data, error } = await query
-        .order("created_at", { ascending: false })
-        .order("id")
-        .range(offset, offset + AUDIT_PAGE_SIZE)
-        .abortSignal(signal);
+      const { data, error } = await readSafeAudit(
+        {
+          _org: orgId,
+          _offset: page * AUDIT_PAGE_SIZE,
+          _limit: AUDIT_PAGE_SIZE + 1,
+          ...(filters.from ? { _from: `${filters.from}T00:00:00-06:00` } : {}),
+          ...(filters.to ? { _to: `${filters.to}T23:59:59.999999-06:00` } : {}),
+          ...(filters.actor === "system"
+            ? { _system: true }
+            : filters.actor
+              ? { _actor: filters.actor }
+              : {}),
+          ...(filters.action ? { _action: filters.action } : {}),
+          ...(filters.entity ? { _entity: filters.entity } : {}),
+        },
+        signal,
+      );
       if (error) throw error;
       return {
         events: data.slice(0, AUDIT_PAGE_SIZE).map(prepareAuditEvent),

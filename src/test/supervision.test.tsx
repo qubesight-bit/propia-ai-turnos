@@ -29,24 +29,12 @@ vi.mock("@tanstack/react-router", async (original) => ({
 }));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    rpc: fixture.rpc,
-    from: (table: string) => {
-      const params: unknown[][] = [];
-      const add = (method: string, ...args: unknown[]) => {
-        params.push([method, ...args]);
-        return query;
-      };
-      const query = {
-        select: (fields: string) => add("select", fields),
-        eq: (key: string, value: string) => add("eq", key, value),
-        is: (key: string, value: null) => add("is", key, value),
-        gte: (key: string, value: string) => add("gte", key, value),
-        lte: (key: string, value: string) => add("lte", key, value),
-        order: (field: string) => add("order", field),
-        range: (from: number, to: number) => add("range", from, to),
-        abortSignal: () => fixture.audit(table, params),
-      };
-      return query;
+    rpc: (name: string, params: Record<string, unknown>) =>
+      name === "read_turnos_audit"
+        ? { abortSignal: () => fixture.audit(name, params) }
+        : fixture.rpc(name, params),
+    from: () => {
+      throw new Error("La auditoría debe usar exclusivamente la RPC");
     },
   },
 }));
@@ -92,7 +80,9 @@ vi.mock("@/lib/data", async (original) => ({
 function renderPage(route: typeof AuditRoute | typeof ApprovalsRoute) {
   const Page = route.options.component!;
   return render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
       <Page />
     </QueryClientProvider>,
   );
@@ -170,6 +160,16 @@ describe("Aprobaciones", () => {
 });
 
 describe("Auditoría", () => {
+  it("mantiene cerrada la lectura cuando la RPC segura no está disponible", async () => {
+    fixture.audit.mockResolvedValue({ data: null, error: { message: "RPC no disponible" } });
+    renderPage(AuditRoute);
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar la auditoría");
+    expect(fixture.audit).toHaveBeenCalledExactlyOnceWith("read_turnos_audit", {
+      _org: "org",
+      _offset: 0,
+      _limit: 26,
+    });
+  });
   it("pagina en el servidor, combina filtros y redacta snapshots", async () => {
     const event = {
       id: "ev",
@@ -180,15 +180,16 @@ describe("Auditoría", () => {
       created_at: "2026-10-01T14:00:00Z",
       before_json: {
         status: "exit_announced",
-        note: "dato confidencial",
-        email: "persona@privado.test",
       },
       after_json: { status: "exit_confirmed" },
+      before_redacted: true,
+      after_redacted: false,
     };
-    fixture.audit.mockImplementation(async (_table, params: unknown[][]) => ({
-      data: params.some(([method, start]) => method === "range" && start === 25)
-        ? [{ ...event, id: "last" }]
-        : Array.from({ length: 26 }, (_, i) => ({ ...event, id: `ev-${i}` })),
+    fixture.audit.mockImplementation(async (_name, params: { _offset: number }) => ({
+      data:
+        params._offset === 25
+          ? [{ ...event, id: "last" }]
+          : Array.from({ length: 26 }, (_, i) => ({ ...event, id: `ev-${i}` })),
       error: null,
     }));
     const view = renderPage(AuditRoute);
@@ -200,15 +201,14 @@ describe("Auditoría", () => {
     expect(screen.getAllByText("Freses · Habitación 204")).toHaveLength(25);
     expect(view.container).toHaveTextContent('"status": "exit_confirmed"');
     expect(view.container).not.toHaveTextContent(/dato confidencial|@privado.test/);
+    expect(screen.getAllByText("Se omitieron campos del registro.")).toHaveLength(25);
     fireEvent.click(screen.getByRole("button", { name: "Siguiente" }));
     await waitFor(() =>
-      expect(fixture.audit).toHaveBeenLastCalledWith(
-        "audit_events",
-        expect.arrayContaining([
-          ["eq", "organization_id", "org"],
-          ["range", 25, 50],
-        ]),
-      ),
+      expect(fixture.audit).toHaveBeenLastCalledWith("read_turnos_audit", {
+        _org: "org",
+        _offset: 25,
+        _limit: 26,
+      }),
     );
     fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-10-01" } });
     fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-10-02" } });
@@ -216,18 +216,16 @@ describe("Auditoría", () => {
     fireEvent.change(screen.getByLabelText("Acción"), { target: { value: "transition" } });
     fireEvent.change(screen.getByLabelText("Entidad"), { target: { value: "turnovers" } });
     await waitFor(() =>
-      expect(fixture.audit).toHaveBeenLastCalledWith(
-        "audit_events",
-        expect.arrayContaining([
-          ["eq", "organization_id", "org"],
-          ["gte", "created_at", "2026-10-01T00:00:00-06:00"],
-          ["lte", "created_at", "2026-10-02T23:59:59.999999-06:00"],
-          ["eq", "actor_id", "actor"],
-          ["eq", "action", "transition"],
-          ["eq", "entity_type", "turnovers"],
-          ["range", 0, 25],
-        ]),
-      ),
+      expect(fixture.audit).toHaveBeenLastCalledWith("read_turnos_audit", {
+        _org: "org",
+        _from: "2026-10-01T00:00:00-06:00",
+        _to: "2026-10-02T23:59:59.999999-06:00",
+        _actor: "actor",
+        _action: "transition",
+        _entity: "turnovers",
+        _offset: 0,
+        _limit: 26,
+      }),
     );
   });
 

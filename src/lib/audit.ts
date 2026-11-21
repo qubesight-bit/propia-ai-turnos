@@ -1,4 +1,5 @@
-import type { Json, Tables } from "@/integrations/supabase/types";
+import type { Json } from "@/integrations/supabase/types";
+import type { SafeAuditRow } from "./audit-client";
 import {
   ROLE_LABEL,
   ROOM_STATUS_LABEL,
@@ -58,7 +59,13 @@ function auditReference(value: Json, field: string) {
   return typeof candidate === "string" ? candidate : undefined;
 }
 
-export function prepareAuditEvent({ before_json, after_json, ...event }: Tables<"audit_events">) {
+export function prepareAuditEvent({
+  before_json,
+  after_json,
+  before_redacted,
+  after_redacted,
+  ...event
+}: SafeAuditRow) {
   const reference = (key: string) =>
     auditReference(after_json, key) ?? auditReference(before_json, key);
   return {
@@ -68,12 +75,18 @@ export function prepareAuditEvent({ before_json, after_json, ...event }: Tables<
       room: reference("room_id"),
       property: reference("property_id"),
     },
-    before: before_json == null ? null : auditSnapshot(before_json, event.entity_type),
-    after: after_json == null ? null : auditSnapshot(after_json, event.entity_type),
+    before:
+      before_json == null && !before_redacted
+        ? null
+        : auditSnapshot(before_json, event.entity_type, before_redacted),
+    after:
+      after_json == null && !after_redacted
+        ? null
+        : auditSnapshot(after_json, event.entity_type, after_redacted),
   };
 }
 
-export function auditSnapshot(value: Json, entity: string) {
+export function auditSnapshot(value: Json, entity: string, redactedOnServer = false) {
   const source = objectSnapshot(value);
   const safe: Record<string, Json> = {};
   for (const [key, allowed] of Object.entries(
@@ -94,6 +107,8 @@ export function auditSnapshot(value: Json, entity: string) {
   return {
     safe,
     redacted:
-      value != null && (value !== source || Object.keys(source).length > Object.keys(safe).length),
+      redactedOnServer ||
+      (value != null &&
+        (value !== source || Object.keys(source).length > Object.keys(safe).length)),
   };
 }

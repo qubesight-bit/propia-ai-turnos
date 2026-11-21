@@ -75,7 +75,11 @@ export function InspectionEditor({
         />
       </div>
       <div className="space-y-2">
-        <p className="text-sm font-medium">Marque los puntos verificados</p>
+        <p className="text-sm font-medium">
+          {inspection.kind === "review"
+            ? "Marque al menos un punto verificado"
+            : "Marque los puntos verificados"}
+        </p>
         {points.map((point) => (
           <label key={point} className="flex items-start gap-2 text-sm">
             <input
