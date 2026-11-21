@@ -73,32 +73,18 @@ export function useTurnovers(roomId?: string) {
   });
 }
 
-export function useTasks() {
+export function useTasks(turnoverId?: string) {
   const { orgId } = useOrg();
   return useQuery({
-    queryKey: ["tasks", orgId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("turnover_tasks")
-        .select("*, turnovers(status, rooms(code, properties(name)))")
-        .eq("organization_id", orgId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-}
-
-export function useInspections() {
-  const { orgId } = useOrg();
-  return useQuery({
-    queryKey: ["inspections", orgId],
+    queryKey: turnoverId ? ["tasks", orgId, turnoverId] : ["tasks", orgId],
     queryFn: ({ signal }) =>
       readAll((start, end) =>
         supabase
-          .from("inspections")
+          .from("turnover_tasks")
           .select("*, turnovers(status, rooms(code, properties(name)))")
           .eq("organization_id", orgId)
+          .match(turnoverId ? { turnover_id: turnoverId } : {})
+          .order("created_at", { ascending: false })
           .order("id")
           .range(start, end)
           .abortSignal(signal),
@@ -106,16 +92,35 @@ export function useInspections() {
   });
 }
 
-export function useApprovals() {
+export function useInspections(turnoverId?: string) {
   const { orgId } = useOrg();
   return useQuery({
-    queryKey: ["approvals", orgId],
+    queryKey: turnoverId ? ["inspections", orgId, turnoverId] : ["inspections", orgId],
+    queryFn: ({ signal }) =>
+      readAll((start, end) =>
+        supabase
+          .from("inspections")
+          .select("*, turnovers(status, rooms(code, properties(name)))")
+          .eq("organization_id", orgId)
+          .match(turnoverId ? { turnover_id: turnoverId } : {})
+          .order("id")
+          .range(start, end)
+          .abortSignal(signal),
+      ),
+  });
+}
+
+export function useApprovals(turnoverId?: string) {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: turnoverId ? ["approvals", orgId, turnoverId] : ["approvals", orgId],
     queryFn: ({ signal }) =>
       readAll((start, end) =>
         supabase
           .from("approvals")
           .select("*, turnovers(status, rooms(code, properties(name)))")
           .eq("organization_id", orgId)
+          .match(turnoverId ? { turnover_id: turnoverId } : {})
           .order("created_at", { ascending: false })
           .order("id")
           .range(start, end)
@@ -159,11 +164,35 @@ export function useAudit(entityId?: string, limit = 500) {
         .order("created_at", { ascending: false })
         .order("id")
         .limit(limit);
-      if (entityId) q = q.or(`entity_id.eq.${entityId},after_json->>turnover_id.eq.${entityId}`);
+      if (entityId)
+        q = q.or(
+          `entity_id.eq.${entityId},after_json->>turnover_id.eq.${entityId},before_json->>turnover_id.eq.${entityId}`,
+        );
       const { data, error } = await q.abortSignal(signal);
       if (error) throw error;
       return data;
     },
+  });
+}
+
+export function useTurnoverTimeline(turnoverId: string) {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: ["audit", orgId, "turnover", turnoverId],
+    queryFn: ({ signal }) =>
+      readAll((start, end) =>
+        supabase
+          .from("audit_events")
+          .select("*")
+          .eq("organization_id", orgId)
+          .or(
+            `entity_id.eq.${turnoverId},after_json->>turnover_id.eq.${turnoverId},before_json->>turnover_id.eq.${turnoverId}`,
+          )
+          .order("created_at", { ascending: false })
+          .order("id")
+          .range(start, end)
+          .abortSignal(signal),
+      ),
   });
 }
 
