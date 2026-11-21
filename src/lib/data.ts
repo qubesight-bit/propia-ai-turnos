@@ -21,15 +21,17 @@ export function useProperties() {
   const { orgId } = useOrg();
   return useQuery({
     queryKey: ["properties", orgId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("properties")
-        .select("*")
-        .eq("organization_id", orgId)
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: ({ signal }) =>
+      readAll((start, end) =>
+        supabase
+          .from("properties")
+          .select("*")
+          .eq("organization_id", orgId)
+          .order("name")
+          .order("id")
+          .range(start, end)
+          .abortSignal(signal),
+      ),
   });
 }
 
@@ -51,21 +53,23 @@ export function useRooms() {
   });
 }
 
-export function useTurnovers() {
+export function useTurnovers(roomId?: string) {
   const { orgId } = useOrg();
   return useQuery({
-    queryKey: ["turnovers", orgId],
+    queryKey: roomId ? ["turnovers", orgId, roomId] : ["turnovers", orgId],
     queryFn: ({ signal }) =>
-      readAll((start, end) =>
-        supabase
+      readAll((start, end) => {
+        let query = supabase
           .from("turnovers")
           .select("*, rooms(code, properties(name))")
-          .eq("organization_id", orgId)
+          .eq("organization_id", orgId);
+        if (roomId) query = query.eq("room_id", roomId);
+        return query
           .order("created_at", { ascending: false })
           .order("id")
           .range(start, end)
-          .abortSignal(signal),
-      ),
+          .abortSignal(signal);
+      }),
   });
 }
 
