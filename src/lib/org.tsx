@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { OrgRole } from "./turnover";
@@ -31,24 +32,15 @@ export function useOrg() {
   return c;
 }
 
-export function OrgProvider({ children }: { children: ReactNode }) {
+export function OrgProvider({ children, user }: { children: ReactNode; user: User }) {
   const qc = useQueryClient();
-  const userQ = useQuery({
-    queryKey: ["me"],
-    queryFn: async () => {
-      const { data, error } = await supabase.auth.getUser();
-      if (error) throw error;
-      return data.user;
-    },
-  });
   const memQ = useQuery({
-    queryKey: ["memberships", userQ.data?.id],
-    enabled: !!userQ.data,
+    queryKey: ["memberships", user.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("memberships")
         .select("organization_id, role, organizations(name)")
-        .eq("user_id", userQ.data!.id);
+        .eq("user_id", user.id);
       if (error) throw error;
       return (data ?? []).map((m) => ({
         organization_id: m.organization_id,
@@ -65,10 +57,10 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const value = useMemo<OrgCtx | null>(() => {
     const memberships = memQ.data ?? [];
     const current = memberships.find((m) => m.organization_id === orgId) ?? memberships[0];
-    if (!current || !userQ.data) return null;
+    if (!current) return null;
     return {
-      userId: userQ.data.id,
-      email: userQ.data.email ?? null,
+      userId: user.id,
+      email: user.email ?? null,
       orgId: current.organization_id,
       orgName: current.name,
       role: current.role,
@@ -79,16 +71,16 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         qc.invalidateQueries();
       },
     };
-  }, [memQ.data, orgId, userQ.data, qc]);
+  }, [memQ.data, orgId, user.id, user.email, qc]);
 
-  if (userQ.isLoading || memQ.isLoading) {
+  if (memQ.isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted-foreground">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando organización…
       </div>
     );
   }
-  const error = userQ.error ?? memQ.error;
+  const error = memQ.error;
   if (error) {
     return <div className="p-8 text-destructive">{errorMessage(error)}</div>;
   }

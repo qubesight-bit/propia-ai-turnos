@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   Building2,
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/lib/org";
-import { ROLE_LABEL } from "@/lib/turnover";
+import { errorMessage, ROLE_LABEL } from "@/lib/turnover";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -65,7 +65,6 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 
 function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const org = useOrg();
-  const qc = useQueryClient();
   const navigate = useNavigate();
   return (
     <div className="flex h-full flex-col gap-6 bg-sidebar p-4 text-sidebar-foreground">
@@ -100,10 +99,13 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         <button
           className="flex items-center gap-2 text-sm text-sidebar-foreground/80 hover:text-sidebar-accent-foreground"
           onClick={async () => {
-            await qc.cancelQueries();
-            qc.clear();
-            await supabase.auth.signOut();
-            navigate({ to: "/auth", search: { redirect: undefined }, replace: true });
+            try {
+              const { error } = await supabase.auth.signOut();
+              if (error) throw error;
+              await navigate({ to: "/auth", search: { redirect: undefined }, replace: true });
+            } catch (error) {
+              toast.error(errorMessage(error));
+            }
           }}
         >
           <LogOut className="h-4 w-4" /> Cerrar sesión
