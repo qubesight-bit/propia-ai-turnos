@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "./org";
+import { prepareAuditEvent } from "./audit";
 
 const PAGE_SIZE = 500;
 
@@ -118,7 +119,7 @@ export function useApprovals(turnoverId?: string) {
       readAll((start, end) =>
         supabase
           .from("approvals")
-          .select("*, turnovers(status, rooms(code, properties(name)))")
+          .select("*, turnovers(status, hold_kind, rooms(code, properties(name)))")
           .eq("organization_id", orgId)
           .match(turnoverId ? { turnover_id: turnoverId } : {})
           .order("created_at", { ascending: false })
@@ -193,6 +194,44 @@ export function useTurnoverTimeline(turnoverId: string) {
           .range(start, end)
           .abortSignal(signal),
       ),
+  });
+}
+
+export type AuditFilters = {
+  from: string;
+  to: string;
+  actor: string;
+  action: string;
+  entity: string;
+};
+
+const AUDIT_PAGE_SIZE = 25;
+
+export function useAuditPage(filters: AuditFilters, page: number) {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: ["audit", orgId, "page", filters, page],
+    enabled: !filters.from || !filters.to || filters.from <= filters.to,
+    queryFn: async ({ signal }) => {
+      let query = supabase.from("audit_events").select("*").eq("organization_id", orgId);
+      if (filters.from) query = query.gte("created_at", `${filters.from}T00:00:00-06:00`);
+      if (filters.to) query = query.lte("created_at", `${filters.to}T23:59:59.999999-06:00`);
+      if (filters.actor === "system") query = query.is("actor_id", null);
+      else if (filters.actor) query = query.eq("actor_id", filters.actor);
+      if (filters.action) query = query.eq("action", filters.action);
+      if (filters.entity) query = query.eq("entity_type", filters.entity);
+      const offset = page * AUDIT_PAGE_SIZE;
+      const { data, error } = await query
+        .order("created_at", { ascending: false })
+        .order("id")
+        .range(offset, offset + AUDIT_PAGE_SIZE)
+        .abortSignal(signal);
+      if (error) throw error;
+      return {
+        events: data.slice(0, AUDIT_PAGE_SIZE).map(prepareAuditEvent),
+        hasNext: data.length > AUDIT_PAGE_SIZE,
+      };
+    },
   });
 }
 

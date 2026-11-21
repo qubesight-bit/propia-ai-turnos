@@ -28,6 +28,7 @@ import {
   type useTurnovers,
 } from "@/lib/data";
 import { useOrg } from "@/lib/org";
+import { decideApproval } from "@/lib/approval-operations";
 import {
   canChangeTasks,
   createTask,
@@ -181,16 +182,7 @@ export function TurnoverDetail({ turnover, onClose }: { turnover: Turnover; onCl
       title: approve ? "Aprobar comercialización" : "Rechazar comercialización",
       managerOnly: true,
       fields: approve ? <Notes /> : <Notes label="Motivo del rechazo" minLength={3} />,
-      command: (form) => {
-        const note = formText(form, "notes");
-        if (!approve && note.length < 3)
-          throw new Error("Indique un motivo de al menos 3 caracteres.");
-        return supabase.rpc("decide_approval", {
-          _approval: approvalId,
-          _approve: approve,
-          _note: note,
-        });
-      },
+      command: (form) => decideApproval(approvalId, approve, formText(form, "notes")),
     });
   }
 
