@@ -32,6 +32,10 @@ export const Route = createFileRoute("/_authenticated/turnovers")({
       { property: "og:description", content: "Rotaciones de TurnOS" },
     ],
   }),
+  validateSearch: (search: Record<string, unknown>): { turnover?: string } =>
+    typeof search["turnover"] === "string" && search["turnover"]
+      ? { turnover: search["turnover"] }
+      : {},
   component: TurnoversRoute,
 });
 
@@ -42,10 +46,24 @@ const sqlNullDate = null as unknown as string;
 
 function TurnoversRoute() {
   const { orgId } = useOrg();
-  return <TurnoversPage key={orgId} />;
+  const { turnover } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  return (
+    <TurnoversPage
+      key={orgId}
+      linkedId={turnover}
+      clearLink={() => void navigate({ search: {}, replace: true })}
+    />
+  );
 }
 
-function TurnoversPage() {
+function TurnoversPage({
+  linkedId,
+  clearLink,
+}: {
+  linkedId: string | undefined;
+  clearLink: () => void;
+}) {
   const { role } = useOrg();
   const properties = useProperties();
   const rooms = useRooms();
@@ -58,7 +76,11 @@ function TurnoversPage() {
   const [selected, setSelected] = useState<string>();
   const [creating, setCreating] = useState(false);
   const [createProperty, setCreateProperty] = useState("");
-  const detail = turnovers.data?.find(({ id }) => id === selected);
+  const detail = turnovers.data?.find(({ id }) => id === (linkedId ?? selected));
+  const closeDetail = () => {
+    setSelected(undefined);
+    if (linkedId) clearLink();
+  };
   const roomProperties = new Map(rooms.data?.map(({ id, property_id }) => [id, property_id]));
   const activeRooms = new Set(
     turnovers.data?.filter(({ status }) => status !== "closed").map(({ room_id }) => room_id),
@@ -237,9 +259,17 @@ function TurnoversPage() {
           )}
         </>
       )}
-      {detail && (
-        <TurnoverDetail key={detail.id} turnover={detail} onClose={() => setSelected(undefined)} />
+      {linkedId && turnovers.isSuccess && !detail && (
+        <EmptyState
+          title="La rotación solicitada no está disponible en esta organización."
+          action={
+            <Button variant="outline" onClick={closeDetail}>
+              Cerrar aviso
+            </Button>
+          }
+        />
       )}
+      {detail && <TurnoverDetail key={detail.id} turnover={detail} onClose={closeDetail} />}
       {creating && canManage(role) && (
         <TurnoverAction
           title="Nueva rotación"

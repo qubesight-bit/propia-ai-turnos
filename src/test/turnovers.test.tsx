@@ -85,15 +85,25 @@ function confirm() {
 }
 
 beforeEach(() => {
+  vi.spyOn(Route, "useSearch").mockReturnValue({});
+  vi.spyOn(Route, "useNavigate").mockReturnValue(vi.fn().mockResolvedValue(undefined));
   fixture.role = "owner";
   fixture.rpc.mockReset().mockResolvedValue({ data: null, error: null });
   fixture.tasks.mockReset().mockReturnValue({ data: [], isSuccess: true });
   fixture.inspections.mockReset().mockReturnValue({ data: [], isSuccess: true });
   fixture.approvals.mockReset().mockReturnValue({ data: [], isSuccess: true });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("Rotaciones", () => {
+  it("abre el detalle de una rotación de la organización desde un enlace", () => {
+    vi.mocked(Route.useSearch).mockReturnValue({ turnover: "t1" });
+    renderTurnovers();
+    expect(screen.getByRole("dialog", { name: "Habitación 204" })).toBeInTheDocument();
+  });
   it("renderiza etapas y filtra por propiedad, etapa, estado y fecha", () => {
     renderTurnovers();
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);

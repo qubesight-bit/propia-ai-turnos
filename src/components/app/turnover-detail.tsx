@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { EmptyState, LoadingBlock } from "@/components/app/app-shell";
+import { InspectionEditor } from "@/components/app/inspection-editor";
 import { StageBadge } from "@/components/app/status-badge";
 import { TurnoverAction, type TurnoverCommand } from "@/components/app/turnover-action";
 import { formText } from "@/lib/utils";
@@ -28,6 +29,13 @@ import {
 } from "@/lib/data";
 import { useOrg } from "@/lib/org";
 import {
+  canChangeTasks,
+  createTask,
+  INSPECTION_LABEL,
+  INSPECTION_STAGE,
+  updateTask,
+} from "@/lib/task-operations";
+import {
   canDo,
   canManage,
   canOperate,
@@ -49,7 +57,6 @@ type Action = {
   fields?: ReactNode;
   managerOnly?: boolean;
 };
-const inspectionLabels = { exit: "Inspección de salida", review: "Revisión final" };
 // SQL accepts NULL to release a hold. Generated Args only contain the enum values.
 const releaseHold = null as unknown as NonNullable<Tables<"turnovers">["hold_kind"]>;
 
@@ -73,6 +80,7 @@ export function TurnoverDetail({ turnover, onClose }: { turnover: Turnover; onCl
   const timeline = useTurnoverTimeline(id);
   const members = useMembers();
   const [action, setAction] = useState<Action>();
+  const [inspection, setInspection] = useState<Tables<"inspections">>();
   const title = `Habitación ${turnover.rooms?.code ?? "—"}`;
   const taskRows = tasks.data ?? [];
   const inspectionRows = inspections.data ?? [];
@@ -82,7 +90,7 @@ export function TurnoverDetail({ turnover, onClose }: { turnover: Turnover; onCl
     !inspections.isError &&
     inspectionRows.some((item) => item.kind === kind && item.status === "completed");
   const pendingApproval = approvals.data?.find((approval) => approval.status === "pending");
-  const editableTasks = status !== "closed" && status !== "move_in_completed";
+  const editableTasks = canChangeTasks(status);
 
   function requirement(to: TurnoverStatus) {
     if (to === "preparation_in_progress" && !completedInspection("exit"))
@@ -168,57 +176,6 @@ export function TurnoverDetail({ turnover, onClose }: { turnover: Turnover; onCl
     });
   }
 
-  function recordInspection(kind: "exit" | "review") {
-    const previous = inspectionRows.find((item) => item.kind === kind);
-    setAction({
-      title: `Registrar ${inspectionLabels[kind].toLowerCase()}`,
-      fields: (
-        <>
-          <Notes label="Hallazgos" minLength={5} />
-          <div className="space-y-2">
-            <Label htmlFor="inspection-evidence">URL de evidencia (opcional)</Label>
-            <Input
-              id="inspection-evidence"
-              type="url"
-              name="evidence"
-              defaultValue={previous?.evidence_url ?? ""}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="inspection-checklist">Puntos verificados (uno por línea)</Label>
-            <Textarea
-              id="inspection-checklist"
-              name="checklist"
-              defaultValue={
-                Array.isArray(previous?.checklist)
-                  ? previous.checklist.filter((entry) => typeof entry === "string").join("\n")
-                  : ""
-              }
-            />
-          </div>
-        </>
-      ),
-      command: (form) => {
-        const notes = formText(form, "notes");
-        const evidence = formText(form, "evidence");
-        if (notes.length < 5) throw new Error("Ingrese al menos 5 caracteres de hallazgos.");
-        if (evidence && !/^https?:\/\//i.test(evidence))
-          throw new Error("Ingrese una URL HTTP o HTTPS.");
-        const checklist = formText(form, "checklist")
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean);
-        return supabase.rpc("record_inspection", {
-          _turnover: id,
-          _kind: kind,
-          _notes: notes,
-          _evidence_url: evidence,
-          _checklist: checklist,
-        });
-      },
-    });
-  }
-
   function decide(approvalId: string, approve: boolean) {
     setAction({
       title: approve ? "Aprobar comercialización" : "Rechazar comercialización",
@@ -260,33 +217,15 @@ export function TurnoverDetail({ turnover, onClose }: { turnover: Turnover; onCl
           </select>
         </div>
       ),
-      command: (form) => {
-        const title = formText(form, "title");
-        const type = formText(form, "type") as Tables<"turnover_tasks">["type"];
-        if (!title || title.length > 200 || !Object.hasOwn(TASK_TYPE_LABEL, type))
-          throw new Error("Ingrese una tarea válida.");
-        return supabase
-          .from("turnover_tasks")
-          .insert({ organization_id: orgId, turnover_id: id, title, type })
-          .select("id")
-          .single();
-      },
+      command: (form) =>
+        createTask(orgId, id, { title: formText(form, "title"), type: formText(form, "type") }),
     });
   }
 
   function finishTask(task: Tables<"turnover_tasks">) {
     setAction({
       title: `Completar tarea: ${task.title}`,
-      command: () =>
-        supabase
-          .from("turnover_tasks")
-          .update({ status: "done" })
-          .eq("organization_id", orgId)
-          .eq("turnover_id", id)
-          .eq("id", task.id)
-          .in("status", ["pending", "in_progress"])
-          .select("id")
-          .single(),
+      command: () => updateTask(orgId, task, { status: "done" }),
     });
   }
 
@@ -458,7 +397,7 @@ export function TurnoverDetail({ turnover, onClose }: { turnover: Turnover; onCl
                   <ul className="divide-y">
                     {inspectionRows.map((item) => (
                       <li key={item.id} className="space-y-1 py-2 text-sm">
-                        <p className="font-medium">{inspectionLabels[item.kind]}</p>
+                        <p className="font-medium">{INSPECTION_LABEL[item.kind]}</p>
                         <p className="text-muted-foreground">
                           {item.status === "completed"
                             ? `Completada · ${memberName(members.data, item.inspector_id)}`
@@ -478,16 +417,15 @@ export function TurnoverDetail({ turnover, onClose }: { turnover: Turnover; onCl
                           </a>
                         )}
                         {operate &&
-                          status ===
-                            (item.kind === "exit" ? "inspection_pending" : "ready_for_review") &&
+                          status === INSPECTION_STAGE[item.kind] &&
                           item.status === "pending" && (
                             <div>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => recordInspection(item.kind)}
+                                onClick={() => setInspection(item)}
                               >
-                                Registrar {inspectionLabels[item.kind].toLowerCase()}
+                                Registrar {INSPECTION_LABEL[item.kind].toLowerCase()}
                               </Button>
                             </div>
                           )}
@@ -582,6 +520,14 @@ export function TurnoverDetail({ turnover, onClose }: { turnover: Turnover; onCl
           </div>
         </DialogContent>
       </Dialog>
+      {inspection && operate && (
+        <InspectionEditor
+          key={inspection.id}
+          inspection={inspection}
+          description={title}
+          onClose={() => setInspection(undefined)}
+        />
+      )}
       {action && (action.managerOnly ? manage : operate) && (
         <TurnoverAction
           title={action.title}
