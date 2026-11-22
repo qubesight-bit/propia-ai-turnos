@@ -16,9 +16,11 @@ const users = Object.fromEntries(
   ["owner", "manager", "staff", "viewer", "outsider"].map((role) => [role, randomUUID()]),
 );
 const secret = "FICTICIO_NO_ENVIAR";
+const managedAudit = process.argv.includes("--managed-audit");
 
 async function load(path) {
-  await sql.unsafe(await readFile(new URL(path, root), "utf8")).simple();
+  const source = await readFile(new URL(path, root), "utf8");
+  await sql.unsafe(managedAudit ? `SET ROLE turnos_qa_migrator;\n${source}\nRESET ROLE;` : source).simple();
 }
 
 function asUser(user, operation) {
@@ -135,10 +137,32 @@ try {
   `,
     )
     .simple();
+  if (managedAudit) {
+    await sql.unsafe(`
+      CREATE ROLE turnos_qa_migrator NOLOGIN CREATEROLE NOBYPASSRLS;
+      GRANT USAGE, CREATE ON SCHEMA public TO turnos_qa_migrator WITH GRANT OPTION;
+      GRANT USAGE ON SCHEMA auth TO turnos_qa_migrator;
+      GRANT REFERENCES, TRIGGER ON auth.users TO turnos_qa_migrator;
+      REVOKE EXECUTE ON FUNCTION auth.uid() FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION auth.uid() TO turnos_qa_migrator, authenticated;
+    `).simple();
+  }
   await load("drizzle/migrations/0000_propia_turnos_core.sql");
   await sql`grant all on public.audit_events to authenticated`;
   await load("docs/sprint-8/sql/01-approval-integrity.sql");
-  await load("docs/sprint-8/sql/02-audit-privacy.sql");
+  await load(managedAudit ? "docs/sprint-9b/sql/02-audit-privacy-managed.sql" : "docs/sprint-8/sql/02-audit-privacy.sql");
+  if (managedAudit) {
+    const [permissions] = await sql`select
+      has_schema_privilege('turnos_qa_migrator', 'auth', 'USAGE WITH GRANT OPTION') as migrator_auth,
+      has_function_privilege('turnos_qa_migrator', 'auth.uid()', 'EXECUTE WITH GRANT OPTION') as migrator_uid,
+      has_schema_privilege('turnos_audit_reader', 'auth', 'USAGE') as reader_auth,
+      has_function_privilege('turnos_audit_reader', 'auth.uid()', 'EXECUTE') as reader_uid,
+      pg_has_role('turnos_qa_migrator', 'turnos_audit_reader', 'SET') as migrator_set,
+      pg_has_role('turnos_qa_migrator', 'turnos_audit_reader', 'USAGE') as migrator_usage`;
+    assert.deepEqual(Object.values(permissions), [false, false, false, false, false, false]);
+    await assert.rejects(asUser("", (tx) => tx`select * from public.read_turnos_audit(${orgA})`), { code: "42501" });
+    await assert.rejects(asUser(users.owner, (tx) => tx`select * from public.read_turnos_audit(null)`), { code: "42501" });
+  }
   for (const [role, id] of Object.entries(users)) {
     await sql`insert into auth.users values (${id}, ${role + "@example.invalid"}, '{}'::jsonb)`;
   }
